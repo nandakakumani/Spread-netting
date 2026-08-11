@@ -2107,9 +2107,16 @@ if uploaded:
                 rename_used=obj["rename_used"],
             )
 
-            safe_label = ifrs_label.replace(" ", "_")
-            file_name = f"{ifrs_label} COB {cob_date_str}.xlsx"
+            cob_ts = pd.Timestamp(cob_date)
+            cob_ddmmyyyy = cob_ts.strftime("%d_%m_%Y")
+            m = re.match(r"^(IFRS)\s*(\d+)", ifrs_label, re.IGNORECASE)
+            if m:
+                ifrs_prefix = f"IFRS {2000 + int(m.group(2))}"
+            else:
+                ifrs_prefix = ifrs_label
 
+            safe_label = ifrs_prefix.replace(" ", "_")
+            file_name = f"{ifrs_prefix} - COB {cob_ddmmyyyy}.xlsx"
             st.download_button(
                 label=f"Download {ifrs_label} COB {cob_date_str}.xlsx",
                 data=xbytes,

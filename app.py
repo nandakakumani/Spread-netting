@@ -2107,19 +2107,8 @@ if uploaded:
                 rename_used=obj["rename_used"],
             )
 
-            # format COB for filename as DD_MM_YY (e.g. 27_07_26)
-        cob_ts = pd.Timestamp(cob_date)
-        cob_ddmmyy = cob_ts.strftime("%d_%m_%y")
-                
-        # if ifrs_label is like "IFRS 26" -> produce "IFRS 2026"
-        m = re.match(r"^(IFRS)\s*(\d+)", ifrs_label, re.IGNORECASE)
-        if m:
-                ifrs_prefix = f"{m.group(1).upper()} {cob_ts.year}"
-        else:
-                ifrs_prefix = ifrs_label
-                
-        safe_label = re.sub(r"\s+", "_", ifrs_prefix)
-        file_name = f"{ifrs_prefix} - COB {cob_ddmmyy}.xlsx"
+            safe_label = ifrs_label.replace(" ", "_")
+            file_name = f"{ifrs_label} COB {cob_date_str}.xlsx"
 
             st.download_button(
                 label=f"Download {ifrs_label} COB {cob_date_str}.xlsx",
@@ -2140,4 +2129,3 @@ else:
         "streamlit run \"Trying to automate spread netting.py\"",
         language="bash",
     )
-

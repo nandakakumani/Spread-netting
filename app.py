@@ -2108,7 +2108,7 @@ if uploaded:
             )
 
             cob_ts = pd.Timestamp(cob_date)
-            cob_ddmmyyyy = cob_ts.strftime("%d_%m_%Y")
+            cob_ddmmyyyy = cob_ts.strftime("%d_%m_%y")
             m = re.match(r"^(IFRS)\s*(\d+)", ifrs_label, re.IGNORECASE)
             if m:
                 ifrs_prefix = f"IFRS {2000 + int(m.group(2))}"

@@ -164,6 +164,7 @@ SCALE_DIVIDE_BY_MILLION = {
     "Brent Swaps",
     "Dated Brent",
     "JCC",
+    "JCC Swaps",
     "Dubai",
 }
 
@@ -174,6 +175,7 @@ RAW_OTHER_PRODUCT_ORDER = [
     "Brent Swaps",
     "Dated Brent",
     "JCC",
+    "JCC Swaps",
     "Dubai",
 ]
 
@@ -1621,7 +1623,12 @@ def export_to_excel_bytes_staged(
                         + m2_raw_cell("Dated Brent", r)
                 )
 
-                jcc_formula = f"={raw_cell('JCC', r)}"
+                jcc_formula = (
+                        "="
+                        + raw_cell("JCC", r)
+                        + "+"
+                        + raw_cell("JCC Swaps", r)
+                )
                 dubai_formula = f"={raw_cell('Dubai', r)}"
 
                 formulas = [brent_formula, jcc_formula, dubai_formula]
@@ -1841,7 +1848,8 @@ st.markdown(
 6) `LNG H DES Med` maps to `ATL`.  
 7) `PEG - DNK` maps to `PEG`; `ZTP - DNK` maps to `ZTP`.  
 8) Shipping is exported separately.  
-9) HH, Brent products, JCC and Dubai are divided by 1,000,000.  
+9) HH, Brent products, JCC, JCC Swaps and Dubai are divided by 1,000,000.  
+10) Additional passthrough products can be specified in the sidebar.  
 """
 )
 
@@ -1866,6 +1874,18 @@ with st.sidebar:
 
     eu_text = st.text_area("EU hubs", value=", ".join(DEFAULT_EU))
     asia_text = st.text_area("Asia hubs", value=", ".join(DEFAULT_ASIA))
+
+    st.divider()
+    st.header("Other Products")
+    other_products_text = st.text_area(
+        "Additional other products",
+        value="JCC Swaps",
+        help=(
+            "Enter product names separated by commas. These products are not netted "
+            "and are exported to the Other Products sheet. Products detected in the "
+            "uploaded workbook are still retained automatically."
+        ),
+    )
 
     st.divider()
     st.header("Units")
@@ -1901,6 +1921,12 @@ if uploaded:
         if _clean_header(x)
     ])
 
+    user_other_products = dedupe_preserve_order([
+        normalize_pivot_product_name(x)
+        for x in other_products_text.split(",")
+        if normalize_pivot_product_name(x)
+    ])
+
     eu_hubs = [h for h in eu_hubs if not _is_non_netted_product(h)]
     asia_hubs = [h for h in asia_hubs if not _is_non_netted_product(h)]
 
@@ -1922,18 +1948,46 @@ if uploaded:
 
             date_col = "Date"
 
-            other_products = detect_other_products(df, date_col=date_col, nettable=all_hubs)
+            detected_other_products = detect_other_products(
+                df,
+                date_col=date_col,
+                nettable=all_hubs,
+            )
 
-            for c in df.columns:
-                if is_freight_product(c) and c not in other_products:
-                    other_products.append(c)
+            # Match sidebar entries to actual workbook columns while ignoring
+            # differences in case, spacing and dash style.
+            column_lookup = {
+                canonical_product_name(c): c
+                for c in df.columns
+                if c != date_col
+            }
+
+            selected_other_products = []
+
+            for product in user_other_products:
+                actual_column = column_lookup.get(canonical_product_name(product))
+                selected_other_products.append(actual_column or product)
+
+            freight_products_found = [
+                c for c in df.columns
+                if is_freight_product(c)
+            ]
+
+            other_products = dedupe_preserve_order(
+                detected_other_products
+                + selected_other_products
+                + freight_products_found
+            )
 
             other_products = [
                 p for p in other_products
                 if p not in EXCLUDE_FROM_OUTPUT_PRODUCTS
+                and p not in all_hubs
             ]
 
-            df = ensure_columns(df, all_hubs)
+            # If a sidebar product is absent from a particular IFRS sheet,
+            # retain it as a zero-valued column so the output layout is stable.
+            df = ensure_columns(df, all_hubs + other_products)
 
             all_inputs = all_hubs + other_products
 

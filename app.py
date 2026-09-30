@@ -1546,8 +1546,8 @@ def export_to_excel_bytes_staged(
         # Oil view
         oil_period_col = raw_end_col + 3
         oil_start_col = oil_period_col + 1
-        oil_main_cols = ["Brent", "JCC", "Dubai"]
-        oil_total_col = oil_start_col + 3
+        oil_main_cols = ["Brent", "JCC", "Dated Brent"]
+        oil_total_col = oil_start_col + len(oil_main_cols)
 
         cell = ws.cell(header_row, oil_period_col, "")
         cell.fill = white_fill
@@ -1572,30 +1572,43 @@ def export_to_excel_bytes_staged(
         def raw_cell(product_name: str, row_num: int) -> str:
             if product_name not in raw_cols_actual:
                 return "0"
+
             col_num = raw_start_col + raw_cols_actual.index(product_name)
             return f"{get_column_letter(col_num)}{row_num}"
 
         def m2_raw_cell(product_name: str, row_num: int) -> str:
             lag_row = row_num - 2
+
             if lag_row < first_data_row:
                 return "0"
+
             return raw_cell(product_name, lag_row)
 
         for i, period in enumerate(periods):
             r = first_data_row + i
 
             pcell = ws.cell(r, oil_period_col, period)
-            pcell.font = total_font if str(period).upper() == "TOTAL" else period_font
+            pcell.font = (
+                total_font
+                if str(period).upper() == "TOTAL"
+                else period_font
+            )
             pcell.fill = white_fill
             pcell.alignment = left
             pcell.border = thin_border
 
             if str(period).upper() == "TOTAL":
-                for j in range(3):
+                for j in range(len(oil_main_cols)):
                     cnum = oil_start_col + j
                     col_letter = get_column_letter(cnum)
+
                     cell = ws.cell(r, cnum)
-                    cell.value = f"=SUM({col_letter}{first_data_row}:{col_letter}{r - 1})"
+                    cell.value = (
+                        f"=SUM("
+                        f"{col_letter}{first_data_row}:"
+                        f"{col_letter}{r - 1}"
+                        f")"
+                    )
                     cell.number_format = num_fmt_passthrough
                     cell.font = total_font
                     cell.fill = orange_fill
@@ -1603,8 +1616,14 @@ def export_to_excel_bytes_staged(
                     cell.border = thin_border
 
                 total_letter = get_column_letter(oil_total_col)
+
                 cell = ws.cell(r, oil_total_col)
-                cell.value = f"=SUM({total_letter}{first_data_row}:{total_letter}{r - 1})"
+                cell.value = (
+                    f"=SUM("
+                    f"{total_letter}{first_data_row}:"
+                    f"{total_letter}{r - 1}"
+                    f")"
+                )
                 cell.number_format = num_fmt_passthrough
                 cell.font = total_font
                 cell.fill = white_fill
@@ -1612,29 +1631,39 @@ def export_to_excel_bytes_staged(
                 cell.border = thin_border
 
             else:
+                # Dated Brent is no longer included in Brent.
                 brent_formula = (
-                        "="
-                        + raw_cell("Brent Bullet", r)
-                        + "+"
-                        + raw_cell("Brent Futures", r)
-                        + "+"
-                        + m2_raw_cell("Brent Swaps", r)
-                        + "+"
-                        + m2_raw_cell("Dated Brent", r)
+                    "="
+                    + raw_cell("Brent Bullet", r)
+                    + "+"
+                    + raw_cell("Brent Futures", r)
+                    + "+"
+                    + m2_raw_cell("Brent Swaps", r)
                 )
 
                 jcc_formula = (
-                        "="
-                        + raw_cell("JCC", r)
-                        + "+"
-                        + raw_cell("JCC Swaps", r)
+                    "="
+                    + raw_cell("JCC", r)
+                    + "+"
+                    + raw_cell("JCC Swaps", r)
                 )
-                dubai_formula = f"={raw_cell('Dubai', r)}"
 
-                formulas = [brent_formula, jcc_formula, dubai_formula]
+                # Dated Brent keeps the same M-2 treatment that was
+                # previously applied inside the Brent calculation.
+                dated_brent_formula = (
+                    "="
+                    + m2_raw_cell("Dated Brent", r)
+                )
+
+                formulas = [
+                    brent_formula,
+                    jcc_formula,
+                    dated_brent_formula,
+                ]
 
                 for j, formula in enumerate(formulas):
                     cnum = oil_start_col + j
+
                     cell = ws.cell(r, cnum)
                     cell.value = formula
                     cell.number_format = num_fmt_passthrough
@@ -1643,11 +1672,18 @@ def export_to_excel_bytes_staged(
                     cell.alignment = center
                     cell.border = thin_border
 
-                brent_col = get_column_letter(oil_start_col)
-                dubai_col = get_column_letter(oil_start_col + 2)
+                first_oil_col = get_column_letter(oil_start_col)
+                last_oil_col = get_column_letter(
+                    oil_start_col + len(oil_main_cols) - 1
+                )
 
                 cell = ws.cell(r, oil_total_col)
-                cell.value = f"=SUM({brent_col}{r}:{dubai_col}{r})"
+                cell.value = (
+                    f"=SUM("
+                    f"{first_oil_col}{r}:"
+                    f"{last_oil_col}{r}"
+                    f")"
+                )
                 cell.number_format = num_fmt_passthrough
                 cell.font = normal_font
                 cell.fill = white_fill
@@ -1659,14 +1695,19 @@ def export_to_excel_bytes_staged(
             header_row,
             oil_start_col,
             first_data_row + len(periods) - 2,
-            oil_start_col + 2,
+            oil_start_col + len(oil_main_cols) - 1,
         )
 
-        # JCC/B ratio block
+                # JCC/B ratio block
         ratio_period_col = oil_total_col + 3
         ratio_start_col = ratio_period_col + 1
 
-        ratio_cols = ["JCC/B ratio", "B eq.", "Brent+Dubai", "Net Eq."]
+        ratio_cols = [
+            "JCC/B ratio",
+            "B eq.",
+            "Brent + Dated Brent",
+            "Net Eq.",
+        ]
 
         for j, col_name in enumerate(ratio_cols):
             cnum = ratio_start_col + j
@@ -1686,18 +1727,26 @@ def export_to_excel_bytes_staged(
             r = first_data_row + i
 
             pcell = ws.cell(r, ratio_period_col, period)
-            pcell.font = total_font if str(period).upper() == "TOTAL" else period_font
+            pcell.font = (
+                total_font
+                if str(period).upper() == "TOTAL"
+                else period_font
+            )
             pcell.fill = white_fill
             pcell.alignment = left
             pcell.border = thin_border
 
             ratio_col_letter = get_column_letter(ratio_start_col)
             b_eq_col_letter = get_column_letter(ratio_start_col + 1)
-            brent_dubai_col_letter = get_column_letter(ratio_start_col + 2)
+            brent_dated_col_letter = get_column_letter(
+                ratio_start_col + 2
+            )
 
             oil_brent_col = get_column_letter(oil_start_col)
             oil_jcc_col = get_column_letter(oil_start_col + 1)
-            oil_dubai_col = get_column_letter(oil_start_col + 2)
+            oil_dated_brent_col = get_column_letter(
+                oil_start_col + 2
+            )
 
             for j, col_name in enumerate(ratio_cols):
                 cnum = ratio_start_col + j
@@ -1705,7 +1754,11 @@ def export_to_excel_bytes_staged(
                 cell.number_format = num_fmt_passthrough
                 cell.alignment = center
                 cell.border = thin_border
-                cell.font = total_font if str(period).upper() == "TOTAL" else normal_font
+                cell.font = (
+                    total_font
+                    if str(period).upper() == "TOTAL"
+                    else normal_font
+                )
 
                 if col_name == "JCC/B ratio":
                     cell.fill = input_ratio_fill
@@ -1713,27 +1766,54 @@ def export_to_excel_bytes_staged(
 
                 elif col_name == "B eq.":
                     cell.fill = white_fill
-                    if str(period).upper() == "TOTAL":
-                        col_letter = get_column_letter(cnum)
-                        cell.value = f"=SUM({col_letter}{first_data_row}:{col_letter}{r - 1})"
-                    else:
-                        cell.value = f"={oil_jcc_col}{r}*{ratio_col_letter}{r}"
 
-                elif col_name == "Brent+Dubai":
-                    cell.fill = white_fill
                     if str(period).upper() == "TOTAL":
                         col_letter = get_column_letter(cnum)
-                        cell.value = f"=SUM({col_letter}{first_data_row}:{col_letter}{r - 1})"
+                        cell.value = (
+                            f"=SUM("
+                            f"{col_letter}{first_data_row}:"
+                            f"{col_letter}{r - 1}"
+                            f")"
+                        )
                     else:
-                        cell.value = f"={oil_brent_col}{r}+{oil_dubai_col}{r}"
+                        cell.value = (
+                            f"={oil_jcc_col}{r}"
+                            f"*{ratio_col_letter}{r}"
+                        )
+
+                elif col_name == "Brent + Dated Brent":
+                    cell.fill = white_fill
+
+                    if str(period).upper() == "TOTAL":
+                        col_letter = get_column_letter(cnum)
+                        cell.value = (
+                            f"=SUM("
+                            f"{col_letter}{first_data_row}:"
+                            f"{col_letter}{r - 1}"
+                            f")"
+                        )
+                    else:
+                        cell.value = (
+                            f"={oil_brent_col}{r}"
+                            f"+{oil_dated_brent_col}{r}"
+                        )
 
                 elif col_name == "Net Eq.":
                     cell.fill = net_eq_fill
+
                     if str(period).upper() == "TOTAL":
                         col_letter = get_column_letter(cnum)
-                        cell.value = f"=SUM({col_letter}{first_data_row}:{col_letter}{r - 1})"
+                        cell.value = (
+                            f"=SUM("
+                            f"{col_letter}{first_data_row}:"
+                            f"{col_letter}{r - 1}"
+                            f")"
+                        )
                     else:
-                        cell.value = f"={b_eq_col_letter}{r}+{brent_dubai_col_letter}{r}"
+                        cell.value = (
+                            f"={b_eq_col_letter}{r}"
+                            f"+{brent_dated_col_letter}{r}"
+                        )
 
         outline_border(
             ws,

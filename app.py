@@ -1648,11 +1648,10 @@ def export_to_excel_bytes_staged(
                     + raw_cell("JCC Swaps", r)
                 )
 
-                # Dated Brent keeps the same M-2 treatment that was
-                # previously applied inside the Brent calculation.
+                # Dated Brent
                 dated_brent_formula = (
                     "="
-                    + m2_raw_cell("Dated Brent", r)
+                    + raw_cell("Dated Brent", r)
                 )
 
                 formulas = [
